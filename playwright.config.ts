@@ -8,7 +8,9 @@ export default defineConfig({
   expect: { timeout: 6_000 },
   fullyParallel: true,
   retries: 0,
-  reporter: [["list"], ["html", { open: "never" }]],
+  reporter: process.env.CI
+    ? [["github"], ["list"], ["html", { open: "never" }]]
+    : [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: `http://localhost:${PORT}`,
     locale: "ja-JP",
