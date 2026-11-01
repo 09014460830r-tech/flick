@@ -106,6 +106,11 @@ export function App() {
                         }
                         onDelete={() => removeTask(task.id)}
                         onEdit={(text) => editTask(task.id, text)}
+                        onDropTo={(f) =>
+                          f === "done"
+                            ? moveTask(task.id, { done: true }, "完了しました")
+                            : moveTask(task.id, { bucket: f, done: false }, `「${BUCKET_LABEL[f]}」に移動しました`)
+                        }
                       />
                     ))}
                   </AnimatePresence>

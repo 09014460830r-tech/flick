@@ -75,3 +75,36 @@ export async function settled(locator: Locator) {
   }
   throw new Error("element never settled");
 }
+
+/** Long-presses a card, carries it to a tab and lets go — by touch on mobile, mouse elsewhere. */
+export async function carry(page: Page, row: Locator, tabName: string, opts: { holdMs?: number } = {}) {
+  const card = row.locator(".card");
+  await expect.poll(() => card.evaluate((el) => el.style.transform), { timeout: 8000 }).toMatch(/^(none)?$/);
+  const from = await settled(card);
+  const to = (await tab(page, tabName).boundingBox())!;
+  const start = { x: from.x + from.width / 2, y: from.y + from.height / 2 };
+  const end = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
+  const hold = opts.holdMs ?? 600;
+  const steps = 15;
+  const hasTouch = await page.evaluate(() => navigator.maxTouchPoints > 0);
+
+  if (hasTouch) {
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type: string, x: number, y: number) =>
+      cdp.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 1 }] });
+    await touch("touchStart", start.x, start.y);
+    await page.waitForTimeout(hold);
+    for (let i = 1; i <= steps; i++) {
+      await touch("touchMove", start.x + ((end.x - start.x) * i) / steps, start.y + ((end.y - start.y) * i) / steps);
+      await page.waitForTimeout(16);
+    }
+    await touch("touchEnd", end.x, end.y);
+    await cdp.detach();
+  } else {
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.waitForTimeout(hold);
+    await page.mouse.move(end.x, end.y, { steps });
+    await page.mouse.up();
+  }
+}

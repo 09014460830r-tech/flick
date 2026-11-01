@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addTask, flick, login, memo, ready, settled, tab, taskByText, tasks } from "./helpers";
+import { addTask, carry, flick, login, memo, ready, settled, tab, taskByText, tasks } from "./helpers";
 
 test.describe("起動", () => {
   test("読み込み中は全画面スケルトンを表示し、完了後に消える", async ({ page }) => {
@@ -276,6 +276,72 @@ test.describe("分類とフリック", () => {
     await page.keyboard.press("ArrowLeft");
     await tab(page, "次に").click();
     await expect(taskByText(page, "キー操作")).toHaveCount(1);
+  });
+
+  test("長押しで持ち上げてタブに放り込むと、その分類へ移る", async ({ page }) => {
+    await addTask(page, "放り込む");
+    await carry(page, taskByText(page, "放り込む"), "いつか");
+    await expect(taskByText(page, "放り込む")).toHaveCount(0);
+    await expect(page.getByRole("status")).toContainText("「いつか」に移動しました");
+    await tab(page, "いつか").click();
+    await expect(taskByText(page, "放り込む")).toHaveAttribute("data-bucket", "someday");
+  });
+
+  test("完了タブに放り込むと完了、完了から分類タブへ放り込むと戻る", async ({ page }) => {
+    await tab(page, "次に").click();
+    await addTask(page, "片付け");
+    await carry(page, taskByText(page, "片付け"), "完了");
+    await tab(page, "完了").click();
+    await expect(taskByText(page, "片付け")).toHaveAttribute("data-done", "true");
+    await carry(page, taskByText(page, "片付け"), "今すぐ");
+    await tab(page, "今すぐ").click();
+    await expect(taskByText(page, "片付け")).toHaveAttribute("data-done", "false");
+    await expect(taskByText(page, "片付け")).toHaveAttribute("data-bucket", "now");
+  });
+
+  test("持ち上げ中は運んでいるカードが現れ、上に乗ったタブが光る", async ({ page }) => {
+    await addTask(page, "運搬中");
+    const box = await settled(taskByText(page, "運搬中").locator(".card"));
+    const to = (await tab(page, "その他").boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(600);
+    await expect(page.getByTestId("lift-ghost")).toBeVisible();
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 10 });
+    await expect(tab(page, "その他")).toHaveAttribute("data-drop", "true");
+    await page.mouse.up();
+    await expect(page.getByTestId("lift-ghost")).toHaveCount(0);
+    await expect(tab(page, "その他")).not.toHaveAttribute("data-drop", "true");
+  });
+
+  test("タブ以外で離すと元に戻り、何も変わらない", async ({ page }) => {
+    await addTask(page, "戻る");
+    const box = await settled(taskByText(page, "戻る").locator(".card"));
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(600);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height + 150, { steps: 10 });
+    await page.mouse.up();
+    await expect(page.getByTestId("lift-ghost")).toHaveCount(0);
+    await expect(taskByText(page, "戻る")).toHaveAttribute("data-bucket", "now");
+    await expect(taskByText(page, "戻る").locator(".card")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("すばやく動かした場合は持ち上がらず、ふつうのフリックになる", async ({ page }) => {
+    await addTask(page, "素早く");
+    await flick(page, taskByText(page, "素早く"), -220);
+    await expect(page.getByTestId("lift-ghost")).toHaveCount(0);
+    await tab(page, "次に").click();
+    await expect(taskByText(page, "素早く")).toHaveCount(1);
+  });
+
+  test("下までスクロールしていてもタブは見えたまま", async ({ page }) => {
+    for (let i = 0; i < 14; i++) await addTask(page, `たくさん${i}`);
+    await page.mouse.wheel(0, 3000);
+    await page.waitForTimeout(300);
+    await expect(tab(page, "完了")).toBeInViewport();
+    await carry(page, taskByText(page, "たくさん0"), "完了");
+    await expect(tab(page, "完了")).toContainText("1");
   });
 
   test("以前の形式（未着手・進行中・完了）で保存したタスクも読み込める", async ({ page }) => {

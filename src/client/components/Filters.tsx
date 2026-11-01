@@ -25,6 +25,7 @@ export function Filters({ value, counts, onChange }: Props) {
           key={f}
           role="tab"
           className="filter"
+          data-filter={f}
           aria-selected={value === f}
           whileTap={{ scale: 0.92 }}
           onClick={() => onChange(f)}

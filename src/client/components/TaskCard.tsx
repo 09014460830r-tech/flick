@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AnimatePresence,
   animate,
@@ -10,6 +10,8 @@ import {
 } from "motion/react";
 import { BUCKETS, BUCKET_LABEL, nextBucket, type Bucket, type Task } from "../lib/api";
 import { Check, ChevronLeft, Trash } from "./Icons";
+import type { Filter } from "./Filters";
+import { LiftGhost, type Lift } from "./LiftGhost";
 
 export const BUCKET_COLOR: Record<Bucket, string> = {
   now: "#ff7a45",
@@ -20,6 +22,8 @@ export const BUCKET_COLOR: Record<Bucket, string> = {
 const DONE = "#2fbf71";
 const DANGER = "#ff4d6a";
 const THRESHOLD = 88;
+const LONG_PRESS_MS = 400;
+const PRESS_SLOP = 8;
 const spring = { type: "spring", stiffness: 420, damping: 34 } as const;
 
 interface Props {
@@ -31,6 +35,8 @@ interface Props {
   onRestore: () => void;
   onDelete: () => void;
   onEdit: (text: string) => void;
+  /** Long-press, drag and release over a tab. */
+  onDropTo: (target: Filter) => void;
 }
 
 interface FlickAction {
@@ -43,13 +49,37 @@ interface FlickAction {
 const fade = (hex: string, alpha: number) =>
   hex + Math.round(alpha * 255).toString(16).padStart(2, "0");
 
-export function TaskCard({ task, nudge, onMove, onDone, onRestore, onDelete, onEdit }: Props) {
+export function TaskCard({ task, nudge, onMove, onDone, onRestore, onDelete, onEdit, onDropTo }: Props) {
   const x = useMotionValue(0);
   const rowRef = useRef<HTMLLIElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [draft, setDraft] = useState(task.text);
   const armed = useRef(0);
   const dragged = useRef(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const press = useRef<{ timer: number; x: number; y: number } | null>(null);
+  const [lift, setLift] = useState<Lift | null>(null);
+  const endLift = useCallback(() => setLift(null), []);
+
+  const cancelPress = () => {
+    if (press.current) clearTimeout(press.current.timer);
+    press.current = null;
+  };
+  // Holding still on a card picks it up so it can be carried to a tab.
+  const startPress = (clientX: number, clientY: number) => {
+    cancelPress();
+    const timer = window.setTimeout(() => {
+      press.current = null;
+      const rect = cardRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      dragged.current = true;
+      x.set(0);
+      navigator.vibrate?.(12);
+      setLift({ startX: clientX, startY: clientY, rect });
+    }, LONG_PRESS_MS);
+    press.current = { timer, x: clientX, y: clientY };
+  };
+  useEffect(() => cancelPress, []);
 
   // A card flicked out of one tab can come straight back (another tab, or undo) before its
   // exit finishes; it is then reused as-is, so put it back at rest.
@@ -160,18 +190,31 @@ export function TaskCard({ task, nudge, onMove, onDone, onRestore, onDelete, onE
       <motion.div
         className="card glass"
         style={{ x, rotate: tilt }}
-        drag={expanded ? false : "x"}
+        drag={expanded || lift ? false : "x"}
         dragDirectionLock
         dragConstraints={{ left: 0, right: 0 }}
         dragElastic={{ left: 1, right: right ? 1 : 0.12 }}
         dragMomentum={false}
-        onPointerDown={() => {
+        ref={cardRef}
+        onPointerDown={(e) => {
           dragged.current = false;
           stopHint();
+          if (!expanded && e.button === 0) startPress(e.clientX, e.clientY);
         }}
-        onDragStart={() => (dragged.current = true)}
+        onPointerMove={(e) => {
+          const p = press.current;
+          if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > PRESS_SLOP) cancelPress();
+        }}
+        onPointerUp={cancelPress}
+        onPointerCancel={cancelPress}
+        onContextMenu={(e) => e.preventDefault()}
+        onDragStart={() => {
+          dragged.current = true;
+          cancelPress();
+        }}
         onDragEnd={(_, info) => settle(info.offset.x, info.velocity.x)}
         whileTap={expanded ? undefined : { scale: 0.985 }}
+        animate={{ opacity: lift ? 0.35 : 1, scale: lift ? 0.97 : 1 }}
         onTap={(e) => {
           if (dragged.current || (e.target as HTMLElement).closest("textarea, button")) return;
           setExpanded((v) => !v);
@@ -292,6 +335,15 @@ export function TaskCard({ task, nudge, onMove, onDone, onRestore, onDelete, onE
           </AnimatePresence>
         </div>
       </motion.div>
+      {lift && (
+        <LiftGhost
+          lift={lift}
+          text={task.text}
+          current={task.done ? "done" : task.bucket}
+          onDrop={onDropTo}
+          onEnd={endLift}
+        />
+      )}
     </motion.li>
   );
 }
