@@ -15,6 +15,7 @@ import {
 } from 'remotion';
 import {feature} from 'topojson-client';
 import landTopo from 'world-atlas/land-50m.json';
+import land110Topo from 'world-atlas/land-110m.json';
 import {cameraAt, H, View, W, widthDeg} from './camera';
 import {CITIES, City, LEG_DATA, Leg, LonLat, MODE_LABEL, PEAKS, TOTAL_KM} from './data';
 import {ModeIcon} from './icons';
@@ -36,27 +37,21 @@ const C = {
 const modeColor = (l: Leg) => (l.mode === 'plane' ? C.plane : C.land_);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const LAND_RAW = feature(landTopo as any, (landTopo as any).objects.land) as any;
-// Drop Antarctica: under Mercator it reaches infinity and makes the clipped fill invert.
-const LAND = {
-  type: 'Feature',
-  properties: {},
-  geometry: {
-    type: 'MultiPolygon',
-    coordinates: (LAND_RAW.features?.[0]?.geometry ?? LAND_RAW.geometry).coordinates.filter(
-      (poly: number[][][]) => Math.max(...poly[0].map((c) => c[1])) > -60,
-    ),
-  },
-} as any;
+// Keep only land polygons near the route (and drop Antarctica) so each frame projects little.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const regionLand = (topo: any) => {
+  const f = feature(topo, topo.objects.land) as any;
+  const coords = (f.features?.[0]?.geometry ?? f.geometry).coordinates.filter((poly: number[][][]) => {
+    const ring = poly[0];
+    const lons = ring.map((c) => c[0]);
+    const lats = ring.map((c) => c[1]);
+    return Math.max(...lons) > 20 && Math.min(...lons) < 170 && Math.max(...lats) > -20 && Math.min(...lats) < 75;
+  });
+  return {type: 'Feature', properties: {}, geometry: {type: 'MultiPolygon', coordinates: coords}} as any;
+};
+const LAND_FINE = regionLand(landTopo);
+const LAND_COARSE = regionLand(land110Topo);
 const GRATICULE = geoGraticule().step([5, 5])();
-
-// Base map is projected once into world space (Mercator, scale = BASE) and then
-// placed with an SVG transform per frame — cheaper and avoids clipping artefacts.
-const BASE = 1000;
-const baseProj = geoMercator().scale(BASE).translate([0, 0]);
-const basePath = geoPath(baseProj).digits(3);
-const LAND_D = basePath(LAND) ?? '';
-const GRID_D = basePath(GRATICULE) ?? '';
 
 const ALL_TEXT =
   Object.values(CITIES).map((c) => c.name).join('') +
@@ -179,6 +174,7 @@ export const TravelRoute: React.FC = () => {
 
   const view = cameraAt(frame);
   const proj = makeProjection(view);
+  const path = geoPath(proj);
   const project = (p: LonLat): XY => proj(p) as XY;
   const zoomDeg = widthDeg(view);
 
@@ -235,17 +231,14 @@ export const TravelRoute: React.FC = () => {
             <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#6b4e2e" floodOpacity="0.18" />
           </filter>
         </defs>
-        <g transform={`translate(${W / 2 - (W / view[2]) * view[0]},${H / 2 - (W / view[2]) * view[1]}) scale(${W / view[2] / BASE})`}>
-          <path d={GRID_D} fill="none" stroke={C.grid} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-          <path
-            d={LAND_D}
-            fill={C.land}
-            stroke={C.landEdge}
-            strokeWidth={1.5}
-            strokeLinejoin="round"
-            vectorEffect="non-scaling-stroke"
-          />
-        </g>
+        <path d={path(GRATICULE) ?? ''} fill="none" stroke={C.grid} strokeWidth={1.5} />
+        <path
+          d={path(zoomDeg > 30 ? LAND_COARSE : LAND_FINE) ?? ''}
+          fill={C.land}
+          stroke={C.landEdge}
+          strokeWidth={1.5}
+          strokeLinejoin="round"
+        />
 
         {/* peaks: only in close-ups */}
         {PEAKS.map((pk) => {
