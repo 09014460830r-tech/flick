@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "flick",
+  "account_id": "6020003af35d5415215cdb2467ad23f6",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -14,7 +15,7 @@
     {
       "binding": "DB",
       "database_name": "flick-db",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "13de56ff-6cbe-4a8d-ba94-ad5870eb5519",
       "migrations_dir": "migrations"
     }
   ],
