@@ -314,13 +314,33 @@ test.describe("分類とフリック", () => {
     await expect(tab(page, "その他")).not.toHaveAttribute("data-drop", "true");
   });
 
-  test("タブ以外で離すと元に戻り、何も変わらない", async ({ page }) => {
-    await addTask(page, "戻る");
-    const box = await settled(taskByText(page, "戻る").locator(".card"));
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  test("タブまで運ばなくても、縦の列のどこで離してもその分類へ移る", async ({ page }) => {
+    await addTask(page, "列で放る");
+    const box = await settled(taskByText(page, "列で放る").locator(".card"));
+    const lane = (await tab(page, "その他").boundingBox())!;
+    const viewport = page.viewportSize()!;
+    await page.mouse.move(box.x + 40, box.y + box.height / 2);
     await page.mouse.down();
     await page.waitForTimeout(600);
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height + 150, { steps: 10 });
+    // Far below the tabs, at the bottom of the screen, inside その他's column.
+    await page.mouse.move(lane.x + lane.width / 2, viewport.height - 40, { steps: 10 });
+    await expect(page.locator('[data-lane="other"]')).toHaveAttribute("data-active", "true");
+    await expect(page.getByTestId("lane")).toHaveCount(5);
+    await page.mouse.up();
+    await expect(page.getByTestId("lane")).toHaveCount(0);
+    await tab(page, "その他").click();
+    await expect(taskByText(page, "列で放る")).toHaveAttribute("data-bucket", "other");
+  });
+
+  test("自分の列（今いるタブの列）で離すと元に戻り、何も変わらない", async ({ page }) => {
+    await addTask(page, "戻る");
+    const box = await settled(taskByText(page, "戻る").locator(".card"));
+    const home = (await tab(page, "今すぐ").boundingBox())!;
+    await page.mouse.move(box.x + 40, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(600);
+    await page.mouse.move(home.x + home.width / 2, box.y + box.height + 150, { steps: 10 });
+    await expect(page.locator('[data-lane="now"]')).toHaveAttribute("data-active", "false");
     await page.mouse.up();
     await expect(page.getByTestId("lift-ghost")).toHaveCount(0);
     await expect(taskByText(page, "戻る")).toHaveAttribute("data-bucket", "now");
