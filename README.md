@@ -14,7 +14,7 @@
 Browser (React + motion)
    │  same origin
    ▼
-Cloudflare Worker (Hono) ── Static Assets（ビルド済みSPA）
+Cloudflare Worker (Hono) ── ビルド済みSPAをWorkerに同梱して配信
    ├── D1        users / sessions / tasks
    ├── Workers AI  @cf/meta/llama-3.3-70b-instruct-fp8-fast
    └── Google OAuth 2.0 (Authorization Code + PKCE)
@@ -24,7 +24,7 @@ Cloudflare Worker (Hono) ── Static Assets（ビルド済みSPA）
 
 | 領域 | 採用 | 理由 |
 | --- | --- | --- |
-| 実行基盤 | **Cloudflare Workers + Static Assets** | フロントとAPIを1つのWorkerで同一オリジン配信できる。CORS不要で、セッションCookieを `SameSite=Lax; HttpOnly` のまま使える。エッジ配信で初回表示が速く「開いた瞬間メモ」に直結。Pagesより新しい推奨構成で、D1/AI のバインディングもそのまま使える。 |
+| 実行基盤 | **Cloudflare Workers（SPAを同梱）** | フロントとAPIを1つのWorkerで同一オリジン配信できる。CORS不要で、セッションCookieを `SameSite=Lax; HttpOnly` のまま使える。エッジ配信で初回表示が速く「開いた瞬間メモ」に直結。画面一式（約150KB gzip）はビルド時に `scripts/embed-static.mjs` でWorkerに埋め込み、ハッシュ付きファイルは `immutable` でキャッシュさせる。デプロイが1回のスクリプトアップロードで完結する。 |
 | DB | **Cloudflare D1** | Workersからバインディングで直接叩けるSQLite。タスクのような小さなリレーショナルデータに十分で、マイグレーションを `wrangler` で管理できる。ユーザー単位の `WHERE user_id = ?` で分離。 |
 | APIフレームワーク | **Hono** | Workers向けに作られた軽量ルーター。Cookie、CSRF（Originチェック）、セキュリティヘッダーのミドルウェアが標準で揃う。 |
 | AI | **Workers AI / Llama 3.3 70B (fp8-fast)** | 指定どおりWorkers AI。Workers AI の中で日本語の指示追従が比較的安定し、`fast` 版で応答も速い。JSON Schema 指定の構造化出力で受け取り、崩れた出力もサーバー側で正規化（`normalizeTasks`、ユニットテストあり）。 |
@@ -40,7 +40,7 @@ Cloudflare Worker (Hono) ── Static Assets（ビルド済みSPA）
 
 ```bash
 npm install
-npm run build
+npm run build     # vite build → Workerへ埋め込み → 型チェック
 npx wrangler d1 migrations apply flick-db --local --env e2e
 npx wrangler dev --env e2e        # http://localhost:8787
 ```
@@ -64,7 +64,7 @@ E2E はスケルトン表示、起動直後のフォーカスと読み込み中�
 2. **Cloudflare**
    ```bash
    npx wrangler login
-   npx wrangler d1 create flick-db          # 出力された database_id を wrangler.jsonc（トップレベル）に設定
+   npx wrangler d1 create flick-db          # 出力された database_id と account_id を wrangler.jsonc（トップレベル）に設定
    npx wrangler secret put GOOGLE_CLIENT_ID
    npx wrangler secret put GOOGLE_CLIENT_SECRET
    npm run deploy                           # build → リモートD1マイグレーション → deploy

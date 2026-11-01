@@ -3,6 +3,7 @@ import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
 import { currentUser, devLogin, finishGoogleLogin, logout, startGoogleLogin } from "./auth";
 import { suggestTasks, type AiMode } from "./ai";
+import { STATIC } from "./static.gen";
 import { STATUSES, type Env, type Status, type User } from "./types";
 
 type App = { Bindings: Env; Variables: { user: User } };
@@ -104,5 +105,16 @@ app.post("/api/ai/suggest", async (c) => {
 });
 
 app.all("/api/*", (c) => c.json({ error: "not found" }, 404));
+
+// The SPA: hashed bundles are immutable; every other path falls back to index.html.
+app.get("*", (c) => {
+  const path = new URL(c.req.url).pathname;
+  const file = STATIC[path] ?? STATIC["/index.html"];
+  const immutable = path.startsWith("/assets/") && path in STATIC;
+  return c.body(file.body, 200, {
+    "content-type": file.type,
+    "cache-control": immutable ? "public, max-age=31536000, immutable" : "no-cache",
+  });
+});
 
 export default app;

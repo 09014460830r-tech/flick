@@ -1,7 +1,6 @@
 export interface Env {
   DB: D1Database;
   AI: Ai;
-  ASSETS: Fetcher;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   /** "1" enables /auth/dev-login. Never set in production. */
