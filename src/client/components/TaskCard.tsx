@@ -67,7 +67,7 @@ export function TaskCard({ task, nudge, onMove, onDone, onRestore, onDelete, onE
     ? null
     : { label: "完了", color: DONE, icon: <Check size={18} />, run: onDone };
   const left: FlickAction = task.done
-    ? { label: `${BUCKET_LABEL[task.bucket]}に戻す`, color: BUCKET_COLOR[task.bucket], icon: <ChevronLeft />, run: onRestore }
+    ? { label: `「${BUCKET_LABEL[task.bucket]}」に戻す`, color: BUCKET_COLOR[task.bucket], icon: <ChevronLeft />, run: onRestore }
     : postponeTo
       ? { label: BUCKET_LABEL[postponeTo], color: BUCKET_COLOR[postponeTo], icon: <ChevronLeft />, run: () => onMove(postponeTo) }
       : { label: "削除", color: DANGER, icon: <Trash />, run: onDelete };

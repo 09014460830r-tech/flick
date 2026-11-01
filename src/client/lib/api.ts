@@ -49,7 +49,7 @@ export const BUCKETS: Bucket[] = ["now", "later", "someday", "other"];
 
 export const BUCKET_LABEL: Record<Bucket, string> = {
   now: "今すぐ",
-  later: "あとで",
+  later: "次に",
   someday: "いつか",
   other: "その他",
 };

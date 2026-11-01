@@ -45,7 +45,7 @@ test.describe("起動", () => {
     await ready(page);
     const text = (await page.locator("main").innerText()).replace(/\s+/g, "");
     // "メモ" is the memo field's label; everything else is a control or a count.
-    expect(text).toBe("タスくんログインメモ今すぐ0あとで0いつか0その他0完了0");
+    expect(text).toBe("タスくんログインメモ今すぐ0次に0いつか0その他0完了0");
   });
 
   test("コンソールエラーが出ない", async ({ page }) => {
@@ -139,9 +139,9 @@ test.describe("分類とフリック", () => {
     await ready(page);
   });
 
-  test("タブは 今すぐ・あとで・いつか・その他・完了 の5つで、最初は今すぐ", async ({ page }) => {
+  test("タブは 今すぐ・次に・いつか・その他・完了 の5つで、最初は今すぐ", async ({ page }) => {
     const names = await page.getByRole("tab").evaluateAll((els) => els.map((e) => e.textContent!.replace(/\d+/g, "")));
-    expect(names).toEqual(["今すぐ", "あとで", "いつか", "その他", "完了"]);
+    expect(names).toEqual(["今すぐ", "次に", "いつか", "その他", "完了"]);
     await expect(tab(page, "今すぐ")).toHaveAttribute("aria-selected", "true");
   });
 
@@ -158,7 +158,7 @@ test.describe("分類とフリック", () => {
   });
 
   test("右フリックで完了タブへ移り、左フリックで元の分類に戻る", async ({ page }) => {
-    await tab(page, "あとで").click();
+    await tab(page, "次に").click();
     await addTask(page, "片付ける");
     await flick(page, taskByText(page, "片付ける"), 220);
     await expect(taskByText(page, "片付ける")).toHaveCount(0);
@@ -166,16 +166,16 @@ test.describe("分類とフリック", () => {
     await tab(page, "完了").click();
     const row = taskByText(page, "片付ける");
     await expect(row).toHaveAttribute("data-done", "true");
-    await expect(row.locator(".chip")).toHaveText("あとで");
+    await expect(row.locator(".chip")).toHaveText("次に");
     await flick(page, row, -220);
     await expect(taskByText(page, "片付ける")).toHaveCount(0);
-    await tab(page, "あとで").click();
+    await tab(page, "次に").click();
     await expect(taskByText(page, "片付ける")).toHaveAttribute("data-done", "false");
   });
 
-  test("左フリックで 今すぐ → あとで → いつか → その他 と後回しにできる", async ({ page }) => {
+  test("左フリックで 今すぐ → 次に → いつか → その他 と後回しにできる", async ({ page }) => {
     await addTask(page, "後回し");
-    for (const [from, to] of [["今すぐ", "あとで"], ["あとで", "いつか"], ["いつか", "その他"]]) {
+    for (const [from, to] of [["今すぐ", "次に"], ["次に", "いつか"], ["いつか", "その他"]]) {
       await tab(page, from).click();
       await flick(page, taskByText(page, "後回し"), -220);
       await expect(taskByText(page, "後回し")).toHaveCount(0);
@@ -241,7 +241,7 @@ test.describe("分類とフリック", () => {
     const bg = await row.locator(".reveal").evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bg).not.toBe("rgba(0, 0, 0, 0)");
     await page.mouse.up();
-    await expect(row.locator(".reveal")).toContainText("あとで");
+    await expect(row.locator(".reveal")).toContainText("次に");
   });
 
   test("タップで展開し、ボタンで分類変更・完了・編集・削除できる", async ({ page }) => {
@@ -274,7 +274,7 @@ test.describe("分類とフリック", () => {
     await addTask(page, "キー操作");
     await taskByText(page, "キー操作").locator(".card").focus();
     await page.keyboard.press("ArrowLeft");
-    await tab(page, "あとで").click();
+    await tab(page, "次に").click();
     await expect(taskByText(page, "キー操作")).toHaveCount(1);
   });
 
@@ -329,12 +329,12 @@ test.describe("Google認証とクラウド同期", () => {
     await ready(page);
     await addTask(page, "クラウド");
     await flick(page, taskByText(page, "クラウド"), -220);
-    await expect(tab(page, "あとで")).toContainText("1");
+    await expect(tab(page, "次に")).toContainText("1");
     await page.waitForLoadState("networkidle");
     await page.evaluate(() => localStorage.clear());
     await page.reload();
     await ready(page);
-    await tab(page, "あとで").click();
+    await tab(page, "次に").click();
     await expect(taskByText(page, "クラウド")).toHaveAttribute("data-bucket", "later");
   });
 

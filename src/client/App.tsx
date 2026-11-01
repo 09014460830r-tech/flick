@@ -99,10 +99,10 @@ export function App() {
                         key={task.id}
                         task={task}
                         nudge={nudge && i === 0}
-                        onMove={(b) => moveTask(task.id, { bucket: b, done: false }, `${BUCKET_LABEL[b]}に移動しました`)}
+                        onMove={(b) => moveTask(task.id, { bucket: b, done: false }, `「${BUCKET_LABEL[b]}」に移動しました`)}
                         onDone={() => moveTask(task.id, { done: true }, "完了しました")}
                         onRestore={() =>
-                          moveTask(task.id, { done: false }, `${BUCKET_LABEL[task.bucket]}に戻しました`)
+                          moveTask(task.id, { done: false }, `「${BUCKET_LABEL[task.bucket]}」に戻しました`)
                         }
                         onDelete={() => removeTask(task.id)}
                         onEdit={(text) => editTask(task.id, text)}
