@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
-import type { Status, Task } from "./lib/api";
-import { addTasks, boot, editTask, logout, removeTask, setStatus, toast, useStore } from "./lib/store";
+import { BUCKET_LABEL, type Bucket, type Task } from "./lib/api";
+import { addTasks, boot, editTask, logout, moveTask, removeTask, toast, useStore } from "./lib/store";
 import { Ambient } from "./components/Ambient";
 import { Header } from "./components/Header";
 import { Composer } from "./components/Composer";
@@ -13,13 +13,13 @@ import { AiSheet, type AiRequest } from "./components/AiSheet";
 import { LoginSheet } from "./components/LoginSheet";
 import { Inbox } from "./components/Icons";
 
-const RANK: Record<Status, number> = { doing: 0, todo: 1, done: 2 };
-const byStatusThenNewest = (a: Task, b: Task) => RANK[a.status] - RANK[b.status] || b.created_at - a.created_at;
+const newestFirst = (a: Task, b: Task) => b.created_at - a.created_at;
+const recentlyFinishedFirst = (a: Task, b: Task) => b.updated_at - a.updated_at;
 const HINT_KEY = "flick:hinted";
 
 export function App() {
   const { phase, user, tasks, toast: currentToast } = useStore();
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>("now");
   const [ai, setAi] = useState<AiRequest | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const [nudge] = useState(() => {
@@ -49,17 +49,21 @@ export function App() {
   }, [nudge, tasks.length]);
 
   const counts = useMemo(() => {
-    const c: Record<Filter, number> = { all: tasks.length, todo: 0, doing: 0, done: 0 };
-    for (const t of tasks) c[t.status]++;
+    const c: Record<Filter, number> = { now: 0, later: 0, someday: 0, other: 0, done: 0 };
+    for (const t of tasks) c[t.done ? "done" : t.bucket]++;
     return c;
   }, [tasks]);
 
   const visible = useMemo(
-    () => tasks.filter((t) => filter === "all" || t.status === filter).sort(byStatusThenNewest),
+    () =>
+      filter === "done"
+        ? tasks.filter((t) => t.done).sort(recentlyFinishedFirst)
+        : tasks.filter((t) => !t.done && t.bucket === filter).sort(newestFirst),
     [tasks, filter],
   );
 
-  const staysVisible = useCallback((s: Status) => filter === "all" || filter === s, [filter]);
+  // New memos land in the open tab's bucket ("今すぐ" while viewing finished tasks).
+  const target: Bucket = filter === "done" ? "now" : filter;
 
   const requestAi = (req: AiRequest) => (user ? setAi(req) : setLoginOpen(true));
 
@@ -73,8 +77,8 @@ export function App() {
           <Header user={user} onLogin={() => setLoginOpen(true)} onLogout={() => void logout()} />
         )}
         <Composer
-          onSubmit={(text) => addTasks([text])}
-          onAi={(text, clear) => requestAi({ mode: "split", text, onAdded: clear })}
+          onSubmit={(text) => addTasks([text], target)}
+          onAi={(text, clear) => requestAi({ mode: "split", text, bucket: target, onAdded: clear })}
         />
         <AnimatePresence mode="wait" initial={false}>
           {phase === "loading" ? (
@@ -95,11 +99,14 @@ export function App() {
                         key={task.id}
                         task={task}
                         nudge={nudge && i === 0}
-                        staysVisible={staysVisible}
-                        onStatus={(s) => setStatus(task.id, s)}
+                        onMove={(b) => moveTask(task.id, { bucket: b, done: false }, `${BUCKET_LABEL[b]}に移動しました`)}
+                        onDone={() => moveTask(task.id, { done: true }, "完了しました")}
+                        onRestore={() =>
+                          moveTask(task.id, { done: false }, `${BUCKET_LABEL[task.bucket]}に戻しました`)
+                        }
                         onDelete={() => removeTask(task.id)}
                         onEdit={(text) => editTask(task.id, text)}
-                        onBreakdown={() => requestAi({ mode: "breakdown", text: task.text })}
+                        onBreakdown={() => requestAi({ mode: "breakdown", text: task.text, bucket: task.bucket })}
                       />
                     ))}
                   </AnimatePresence>
@@ -130,7 +137,7 @@ export function App() {
           )}
         </AnimatePresence>
       </main>
-      <AiSheet request={ai} onClose={() => setAi(null)} onAdd={addTasks} />
+      <AiSheet request={ai} onClose={() => setAi(null)} onAdd={(texts) => ai && addTasks(texts, ai.bucket)} />
       <LoginSheet open={loginOpen} onClose={() => setLoginOpen(false)} />
       <Toast toast={currentToast} />
     </MotionConfig>

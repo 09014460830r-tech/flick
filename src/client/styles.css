@@ -255,7 +255,7 @@ button {
 .filters {
   margin: 14px 0 6px;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   padding: 4px;
   border-radius: 18px;
 }
@@ -264,6 +264,7 @@ button {
   height: 36px;
   border-radius: 14px;
   font-size: 13px;
+  white-space: nowrap;
   font-weight: 600;
   color: var(--ink-2);
   display: flex;
@@ -348,14 +349,7 @@ button {
   border: 2px solid currentColor;
   color: var(--todo);
 }
-.status-dot[data-status="doing"] {
-  color: var(--doing);
-  background: conic-gradient(currentColor 0 50%, transparent 50% 100%);
-  background-clip: content-box;
-  padding: 2px;
-}
-.status-dot[data-status="done"] {
-  color: var(--done);
+.status-dot[data-done="true"] {
   background: currentColor;
 }
 .task-body {

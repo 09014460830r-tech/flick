@@ -1,16 +1,23 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AnimatePresence,
   animate,
   motion,
   useMotionValue,
+  useIsPresent,
   useMotionValueEvent,
   useTransform,
 } from "motion/react";
-import { STATUS_LABEL, STATUS_ORDER, nextStatus, prevStatus, type Status, type Task } from "../lib/api";
-import { Check, ChevronLeft, ChevronRight, Sparkle, Trash } from "./Icons";
+import { BUCKETS, BUCKET_LABEL, nextBucket, type Bucket, type Task } from "../lib/api";
+import { Check, ChevronLeft, Sparkle, Trash } from "./Icons";
 
-export const STATUS_COLOR: Record<Status, string> = { todo: "#8c93b0", doing: "#ff9f2e", done: "#2fbf71" };
+export const BUCKET_COLOR: Record<Bucket, string> = {
+  now: "#ff7a45",
+  later: "#4c8dff",
+  someday: "#a66bff",
+  other: "#8c93b0",
+};
+const DONE = "#2fbf71";
 const DANGER = "#ff4d6a";
 const THRESHOLD = 88;
 const spring = { type: "spring", stiffness: 420, damping: 34 } as const;
@@ -18,17 +25,26 @@ const spring = { type: "spring", stiffness: 420, damping: 34 } as const;
 interface Props {
   task: Task;
   nudge: boolean;
-  staysVisible: (status: Status) => boolean;
-  onStatus: (status: Status) => void;
+  /** Move to a bucket; a finished task also becomes unfinished. */
+  onMove: (bucket: Bucket) => void;
+  onDone: () => void;
+  onRestore: () => void;
   onDelete: () => void;
   onEdit: (text: string) => void;
   onBreakdown: () => void;
 }
 
+interface FlickAction {
+  label: string;
+  color: string;
+  icon: ReactNode;
+  run: () => void;
+}
+
 const fade = (hex: string, alpha: number) =>
   hex + Math.round(alpha * 255).toString(16).padStart(2, "0");
 
-export function TaskCard({ task, nudge, staysVisible, onStatus, onDelete, onEdit, onBreakdown }: Props) {
+export function TaskCard({ task, nudge, onMove, onDone, onRestore, onDelete, onEdit, onBreakdown }: Props) {
   const x = useMotionValue(0);
   const rowRef = useRef<HTMLLIElement>(null);
   const [expanded, setExpanded] = useState(false);
@@ -36,15 +52,32 @@ export function TaskCard({ task, nudge, staysVisible, onStatus, onDelete, onEdit
   const armed = useRef(0);
   const dragged = useRef(false);
 
-  const next = nextStatus(task.status);
-  const prev = prevStatus(task.status);
-  const rightColor = next ? STATUS_COLOR[next] : STATUS_COLOR[task.status];
-  const leftColor = prev ? STATUS_COLOR[prev] : DANGER;
+  // A card flicked out of one tab can come straight back (another tab, or undo) before its
+  // exit finishes; it is then reused as-is, so put it back at rest.
+  const isPresent = useIsPresent();
+  useEffect(() => {
+    if (!isPresent) return;
+    x.set(0);
+    setExpanded(false);
+  }, [isPresent, x]);
+
+  // Right finishes a task; left postpones it to the next bucket (deleting from the last one).
+  // A finished task flicked left goes back to the bucket it came from.
+  const postponeTo = nextBucket(task.bucket);
+  const right: FlickAction | null = task.done
+    ? null
+    : { label: "完了", color: DONE, icon: <Check size={18} />, run: onDone };
+  const left: FlickAction = task.done
+    ? { label: `${BUCKET_LABEL[task.bucket]}に戻す`, color: BUCKET_COLOR[task.bucket], icon: <ChevronLeft />, run: onRestore }
+    : postponeTo
+      ? { label: BUCKET_LABEL[postponeTo], color: BUCKET_COLOR[postponeTo], icon: <ChevronLeft />, run: () => onMove(postponeTo) }
+      : { label: "削除", color: DANGER, icon: <Trash />, run: onDelete };
+  const rightColor = right?.color ?? "#ffffff";
 
   const background = useTransform(
     x,
     [-THRESHOLD, -THRESHOLD * 0.5, 0, THRESHOLD * 0.5, THRESHOLD],
-    [leftColor, fade(leftColor, 0.45), fade(leftColor, 0), fade(rightColor, 0.45), rightColor],
+    [left.color, fade(left.color, 0.45), fade(left.color, 0), fade(rightColor, 0.45), rightColor],
   );
   const leftOpacity = useTransform(x, [0, THRESHOLD * 0.6], [0, 1]);
   const rightOpacity = useTransform(x, [-THRESHOLD * 0.6, 0], [1, 0]);
@@ -53,7 +86,7 @@ export function TaskCard({ task, nudge, staysVisible, onStatus, onDelete, onEdit
   const tilt = useTransform(x, [-240, 0, 240], [-2.5, 0, 2.5]);
 
   useMotionValueEvent(x, "change", (v) => {
-    const zone = v > THRESHOLD && next ? 1 : v < -THRESHOLD ? -1 : 0;
+    const zone = v > THRESHOLD && right ? 1 : v < -THRESHOLD ? -1 : 0;
     if (zone !== armed.current) {
       armed.current = zone;
       if (zone) navigator.vibrate?.(8);
@@ -72,19 +105,17 @@ export function TaskCard({ task, nudge, staysVisible, onStatus, onDelete, onEdit
     hint.current = null;
   };
 
-  const commit = async (dir: 1 | -1, target: Status | null) => {
+  // Every flick moves the card out of the current tab, so it flies off and the row collapses.
+  const commit = async (dir: 1 | -1, action: FlickAction) => {
     const width = rowRef.current?.offsetWidth ?? 400;
-    const leaving = target === null || !staysVisible(target);
     await animate(x, dir * (width + 40), { duration: 0.2, ease: [0.4, 0, 1, 1] });
-    if (target) onStatus(target);
-    else onDelete();
-    if (!leaving) animate(x, 0, { type: "spring", stiffness: 260, damping: 24 });
+    action.run();
   };
 
   const settle = (dx: number, vx: number) => {
     const dir = dx > THRESHOLD || (vx > 650 && dx > 32) ? 1 : dx < -THRESHOLD || (vx < -650 && dx < -32) ? -1 : 0;
-    if (dir === 1 && next) return commit(1, next);
-    if (dir === -1) return commit(-1, prev);
+    if (dir === 1 && right) return commit(1, right);
+    if (dir === -1) return commit(-1, left);
     animate(x, 0, spring);
   };
 
@@ -93,12 +124,19 @@ export function TaskCard({ task, nudge, staysVisible, onStatus, onDelete, onEdit
     else setDraft(task.text);
   };
 
+  const buttonIn = (i: number) => ({
+    initial: { opacity: 0, y: 6 },
+    animate: { opacity: 1, y: 0, transition: { delay: 0.03 * i } },
+    whileTap: { scale: 0.9 },
+  });
+
   return (
     <motion.li
       ref={rowRef}
       className="row"
       data-testid="task"
-      data-status={task.status}
+      data-bucket={task.bucket}
+      data-done={task.done}
       layout="position"
       initial={{ opacity: 0, y: -14, scale: 0.96, filter: "blur(6px)" }}
       animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
@@ -107,25 +145,16 @@ export function TaskCard({ task, nudge, staysVisible, onStatus, onDelete, onEdit
     >
       <motion.div className="reveal" style={{ background }} aria-hidden>
         <motion.span className="reveal-side" style={{ opacity: leftOpacity, scale: leftScale }}>
-          {next && (
+          {right && (
             <>
-              {next === "done" ? <Check size={18} /> : <ChevronRight />}
-              {STATUS_LABEL[next]}
+              {right.icon}
+              {right.label}
             </>
           )}
         </motion.span>
         <motion.span className="reveal-side" style={{ opacity: rightOpacity, scale: rightScale }}>
-          {prev ? (
-            <>
-              {STATUS_LABEL[prev]}
-              <ChevronLeft />
-            </>
-          ) : (
-            <>
-              削除
-              <Trash />
-            </>
-          )}
+          {left.label}
+          {left.icon}
         </motion.span>
       </motion.div>
 
@@ -135,7 +164,7 @@ export function TaskCard({ task, nudge, staysVisible, onStatus, onDelete, onEdit
         drag={expanded ? false : "x"}
         dragDirectionLock
         dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={{ left: 1, right: next ? 1 : 0.12 }}
+        dragElastic={{ left: 1, right: right ? 1 : 0.12 }}
         dragMomentum={false}
         onPointerDown={() => {
           dragged.current = false;
@@ -151,18 +180,31 @@ export function TaskCard({ task, nudge, staysVisible, onStatus, onDelete, onEdit
         tabIndex={0}
         role="button"
         aria-expanded={expanded}
-        aria-label={`${task.text}（${STATUS_LABEL[task.status]}）`}
+        aria-label={`${task.text}（${task.done ? "完了" : BUCKET_LABEL[task.bucket]}）`}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;
           stopHint();
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             setExpanded((v) => !v);
-          } else if (e.key === "ArrowRight" && next) commit(1, next);
-          else if (e.key === "ArrowLeft") commit(-1, prev);
+          } else if (e.key === "ArrowRight" && right) commit(1, right);
+          else if (e.key === "ArrowLeft") commit(-1, left);
         }}
       >
-        <StatusDot status={task.status} />
+        <motion.span
+          className="status-dot"
+          data-done={task.done}
+          style={{ color: task.done ? DONE : BUCKET_COLOR[task.bucket] }}
+          initial={{ scale: 0.2, rotate: -90 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: "spring", stiffness: 600, damping: 18 }}
+        >
+          {task.done && (
+            <span style={{ color: "#fff", display: "grid" }}>
+              <Check size={12} />
+            </span>
+          )}
+        </motion.span>
         <div className="task-body">
           {expanded ? (
             <textarea
@@ -181,14 +223,21 @@ export function TaskCard({ task, nudge, staysVisible, onStatus, onDelete, onEdit
               }}
             />
           ) : (
-            <div className={`task-text ${task.status === "done" ? "done" : ""}`}>
+            <div className={`task-text ${task.done ? "done" : ""}`}>
               {task.text}
               <motion.span
                 className="strike"
-                initial={false}
-                animate={{ scaleX: task.status === "done" ? 1 : 0 }}
-                transition={{ duration: 0.35, ease: [0.65, 0, 0.35, 1] }}
+                initial={{ scaleX: 0 }}
+                animate={{ scaleX: task.done ? 1 : 0 }}
+                transition={{ duration: 0.35, delay: 0.15, ease: [0.65, 0, 0.35, 1] }}
               />
+            </div>
+          )}
+          {task.done && !expanded && (
+            <div>
+              <span className="chip" style={{ background: BUCKET_COLOR[task.bucket] }}>
+                {BUCKET_LABEL[task.bucket]}
+              </span>
             </div>
           )}
           <AnimatePresence initial={false}>
@@ -202,29 +251,34 @@ export function TaskCard({ task, nudge, staysVisible, onStatus, onDelete, onEdit
                 style={{ overflow: "hidden" }}
               >
                 <div className="card-actions">
-                  {STATUS_ORDER.map((s, i) => (
-                    <motion.button
-                      key={s}
-                      type="button"
-                      className="mini-btn"
-                      aria-pressed={task.status === s}
-                      style={task.status === s ? { background: STATUS_COLOR[s] } : undefined}
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0, transition: { delay: 0.03 * i } }}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={() => onStatus(s)}
-                    >
-                      {STATUS_LABEL[s]}
-                    </motion.button>
-                  ))}
+                  {BUCKETS.map((b, i) => {
+                    const current = !task.done && task.bucket === b;
+                    return (
+                      <motion.button
+                        key={b}
+                        type="button"
+                        className="mini-btn"
+                        aria-pressed={current}
+                        style={current ? { background: BUCKET_COLOR[b] } : undefined}
+                        {...buttonIn(i)}
+                        onClick={() => !current && onMove(b)}
+                      >
+                        {BUCKET_LABEL[b]}
+                      </motion.button>
+                    );
+                  })}
                   <motion.button
                     type="button"
-                    className="mini-btn ai"
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0, transition: { delay: 0.1 } }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={onBreakdown}
+                    className="mini-btn"
+                    aria-pressed={task.done}
+                    style={task.done ? { background: DONE } : undefined}
+                    {...buttonIn(4)}
+                    onClick={task.done ? onRestore : onDone}
                   >
+                    <Check size={13} />
+                    完了
+                  </motion.button>
+                  <motion.button type="button" className="mini-btn ai" {...buttonIn(5)} onClick={onBreakdown}>
                     <Sparkle size={15} />
                     AIで分解
                   </motion.button>
@@ -232,9 +286,7 @@ export function TaskCard({ task, nudge, staysVisible, onStatus, onDelete, onEdit
                     type="button"
                     className="mini-btn danger"
                     aria-label="削除"
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0, transition: { delay: 0.13 } }}
-                    whileTap={{ scale: 0.9 }}
+                    {...buttonIn(6)}
                     onClick={onDelete}
                   >
                     <Trash />
@@ -246,50 +298,5 @@ export function TaskCard({ task, nudge, staysVisible, onStatus, onDelete, onEdit
         </div>
       </motion.div>
     </motion.li>
-  );
-}
-
-function StatusDot({ status }: { status: Status }) {
-  const mounted = useRef(false);
-  const [burst, setBurst] = useState(0);
-  useEffect(() => {
-    if (mounted.current && status === "done") setBurst((b) => b + 1);
-    mounted.current = true;
-  }, [status]);
-  return (
-    <span style={{ position: "relative", flex: "none" }}>
-      <motion.span
-        key={status}
-        className="status-dot"
-        data-status={status}
-        initial={mounted.current ? { scale: 0.2, rotate: -90 } : false}
-        animate={{ scale: 1, rotate: 0 }}
-        transition={{ type: "spring", stiffness: 600, damping: 18 }}
-      >
-        {status === "done" && <span style={{ color: "#fff", display: "grid" }}><Check size={12} /></span>}
-      </motion.span>
-      {burst > 0 &&
-        Array.from({ length: 8 }, (_, i) => {
-          const angle = (i / 8) * Math.PI * 2;
-          return (
-            <motion.span
-              key={`${burst}-${i}`}
-              style={{
-                position: "absolute",
-                left: 9,
-                top: 11,
-                width: 5,
-                height: 5,
-                borderRadius: 3,
-                background: i % 2 ? STATUS_COLOR.done : "#9a5cff",
-                pointerEvents: "none",
-              }}
-              initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
-              animate={{ x: Math.cos(angle) * 22, y: Math.sin(angle) * 22, opacity: 0, scale: 0.4 }}
-              transition={{ duration: 0.55, ease: "easeOut" }}
-            />
-          );
-        })}
-    </span>
   );
 }

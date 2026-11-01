@@ -28,7 +28,7 @@ export function Header({ user, onLogin, onLogout }: Props) {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ type: "spring", stiffness: 340, damping: 28 }}
     >
-      <span className="wordmark">Flick</span>
+      <span className="wordmark">タスくん</span>
       {user ? (
         <motion.button
           className="avatar glass"

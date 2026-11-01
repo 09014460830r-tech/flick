@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { api, UnauthorizedError, type Status, type Task, type User } from "./api";
+import { api, normalizeTask, UnauthorizedError, type Bucket, type Task, type TaskPatch, type User } from "./api";
 
 export interface Toast {
   id: number;
@@ -35,6 +35,8 @@ const storage = {
     }
   },
 };
+
+const loadTasks = (key: string) => storage.get<unknown[]>(key, []).map(normalizeTask);
 
 let state: State = { phase: "loading", user: null, tasks: [], toast: null };
 const listeners = new Set<() => void>();
@@ -80,14 +82,14 @@ export async function boot() {
   let tasks: Task[];
   try {
     user = await api.me();
-    const guest = storage.get<Task[]>(GUEST_KEY, []);
+    const guest = loadTasks(GUEST_KEY);
     if (guest.length) {
       await api.create(guest);
       storage.set(GUEST_KEY, null);
     }
     tasks = await api.list();
   } catch (e) {
-    tasks = e instanceof UnauthorizedError ? storage.get<Task[]>(GUEST_KEY, []) : storage.get<Task[]>(CACHE_KEY, []);
+    tasks = loadTasks(e instanceof UnauthorizedError ? GUEST_KEY : CACHE_KEY);
     if (!(e instanceof UnauthorizedError)) toast("オフラインです");
   }
   state = { ...state, user };
@@ -99,9 +101,9 @@ export async function boot() {
   }
 }
 
-const makeTask = (text: string, i = 0): Task => {
+const makeTask = (text: string, bucket: Bucket, i = 0): Task => {
   const now = Date.now() + i;
-  return { id: crypto.randomUUID(), text, status: "todo", created_at: now, updated_at: now };
+  return { id: crypto.randomUUID(), text, bucket, done: false, created_at: now, updated_at: now };
 };
 
 function insert(newTasks: Task[]) {
@@ -114,22 +116,35 @@ function insert(newTasks: Task[]) {
   void sync(previous, () => api.create(newTasks));
 }
 
-export const addTasks = (texts: string[]) =>
+export const addTasks = (texts: string[], bucket: Bucket) =>
   insert(
     texts
       .map((t) => t.trim())
       .filter(Boolean)
       .reverse()
-      .map(makeTask),
+      .map((text, i) => makeTask(text, bucket, i)),
   );
 
-function patchTask(id: string, patch: Partial<Pick<Task, "text" | "status">>) {
+function patchTask(id: string, patch: TaskPatch) {
   const previous = state.tasks;
   set({ tasks: previous.map((t) => (t.id === id ? { ...t, ...patch, updated_at: Date.now() } : t)) });
   void sync(previous, () => api.update(id, patch));
 }
 
-export const setStatus = (id: string, status: Status) => patchTask(id, { status });
+/** Moves a task (to another bucket, or into/out of done) and offers to undo it. */
+export function moveTask(id: string, patch: Pick<TaskPatch, "bucket" | "done">, message: string) {
+  const before = state.tasks.find((t) => t.id === id);
+  if (!before) return;
+  patchTask(id, patch);
+  toast(message, {
+    label: "元に戻す",
+    run: () => {
+      dismissToast();
+      patchTask(id, { bucket: before.bucket, done: before.done });
+    },
+  });
+}
+
 export const editTask = (id: string, text: string) => text.trim() && patchTask(id, { text: text.trim() });
 
 export function removeTask(id: string) {
@@ -151,5 +166,5 @@ export async function logout() {
   await api.logout().catch(() => undefined);
   storage.set(CACHE_KEY, null);
   state = { ...state, user: null };
-  set({ tasks: storage.get<Task[]>(GUEST_KEY, []) });
+  set({ tasks: loadTasks(GUEST_KEY) });
 }

@@ -1,12 +1,15 @@
-export type Status = "todo" | "doing" | "done";
+export type Bucket = "now" | "later" | "someday" | "other";
 
 export interface Task {
   id: string;
   text: string;
-  status: Status;
+  bucket: Bucket;
+  done: boolean;
   created_at: number;
   updated_at: number;
 }
+
+export type TaskPatch = Partial<Pick<Task, "text" | "bucket" | "done">>;
 
 export interface User {
   id: string;
@@ -32,9 +35,9 @@ const json = (method: string, body: unknown): RequestInit => ({ method, body: JS
 
 export const api = {
   me: () => request<{ user: User }>("/api/me").then((r) => r.user),
-  list: () => request<{ tasks: Task[] }>("/api/tasks").then((r) => r.tasks),
+  list: () => request<{ tasks: unknown[] }>("/api/tasks").then((r) => r.tasks.map(normalizeTask)),
   create: (tasks: Partial<Task>[]) => request<{ tasks: Task[] }>("/api/tasks", json("POST", { tasks })),
-  update: (id: string, patch: Partial<Pick<Task, "text" | "status">>) =>
+  update: (id: string, patch: TaskPatch) =>
     request(`/api/tasks/${encodeURIComponent(id)}`, json("PATCH", patch)),
   remove: (id: string) => request(`/api/tasks/${encodeURIComponent(id)}`, { method: "DELETE" }),
   suggest: (mode: "split" | "breakdown", text: string) =>
@@ -42,13 +45,29 @@ export const api = {
   logout: () => request("/auth/logout", { method: "POST" }),
 };
 
-export const STATUS_ORDER: Status[] = ["todo", "doing", "done"];
+export const BUCKETS: Bucket[] = ["now", "later", "someday", "other"];
 
-export const STATUS_LABEL: Record<Status, string> = {
-  todo: "未着手",
-  doing: "進行中",
-  done: "完了",
+export const BUCKET_LABEL: Record<Bucket, string> = {
+  now: "今すぐ",
+  later: "あとで",
+  someday: "いつか",
+  other: "その他",
 };
 
-export const nextStatus = (s: Status): Status | null => STATUS_ORDER[STATUS_ORDER.indexOf(s) + 1] ?? null;
-export const prevStatus = (s: Status): Status | null => STATUS_ORDER[STATUS_ORDER.indexOf(s) - 1] ?? null;
+/** The bucket a left flick postpones to; null for the last one (where a left flick deletes). */
+export const nextBucket = (b: Bucket): Bucket | null => BUCKETS[BUCKETS.indexOf(b) + 1] ?? null;
+
+const isBucket = (b: unknown): b is Bucket => BUCKETS.includes(b as Bucket);
+
+/** Accepts server rows (done as 0/1) and tasks saved by earlier versions (todo/doing/done status). */
+export function normalizeTask(raw: unknown): Task {
+  const t = raw as Partial<Omit<Task, "done">> & { status?: string; done?: unknown };
+  return {
+    id: String(t.id),
+    text: String(t.text ?? ""),
+    bucket: isBucket(t.bucket) ? t.bucket : "now",
+    done: t.done === undefined ? t.status === "done" : t.done === true || t.done === 1,
+    created_at: Number(t.created_at) || Date.now(),
+    updated_at: Number(t.updated_at) || Date.now(),
+  };
+}

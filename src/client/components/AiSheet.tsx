@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { api } from "../lib/api";
+import { api, type Bucket } from "../lib/api";
 import { Check, Sparkle } from "./Icons";
 import { Sheet } from "./Sheet";
 
 export interface AiRequest {
   mode: "split" | "breakdown";
   text: string;
+  /** Where accepted suggestions are added. */
+  bucket: Bucket;
   onAdded?: () => void;
 }
 

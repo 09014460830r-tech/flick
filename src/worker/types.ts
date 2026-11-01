@@ -16,5 +16,5 @@ export interface User {
   picture: string | null;
 }
 
-export const STATUSES = ["todo", "doing", "done"] as const;
-export type Status = (typeof STATUSES)[number];
+export const BUCKETS = ["now", "later", "someday", "other"] as const;
+export type Bucket = (typeof BUCKETS)[number];

@@ -1,9 +1,9 @@
 import { motion } from "motion/react";
-import { STATUS_LABEL, type Status } from "../lib/api";
+import { BUCKETS, BUCKET_LABEL, type Bucket } from "../lib/api";
 
-export type Filter = "all" | Status;
-const FILTERS: Filter[] = ["all", "todo", "doing", "done"];
-const label = (f: Filter) => (f === "all" ? "すべて" : STATUS_LABEL[f]);
+export type Filter = Bucket | "done";
+const FILTERS: Filter[] = [...BUCKETS, "done"];
+const label = (f: Filter) => (f === "done" ? "完了" : BUCKET_LABEL[f]);
 
 interface Props {
   value: Filter;

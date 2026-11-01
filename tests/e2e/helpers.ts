@@ -2,6 +2,7 @@ import { expect, type Locator, type Page } from "@playwright/test";
 
 export const tasks = (page: Page) => page.getByTestId("task");
 export const taskByText = (page: Page, text: string) => tasks(page).filter({ hasText: text });
+export const tab = (page: Page, name: string) => page.getByRole("tab", { name: new RegExp(`^${name}`) });
 export const memo = (page: Page) => page.getByLabel("メモ", { exact: true });
 
 /** Fresh signed-in session for a unique user (dev login exists only in the e2e environment). */
