@@ -5,7 +5,6 @@ import { Check, Sparkle } from "./Icons";
 import { Sheet } from "./Sheet";
 
 export interface AiRequest {
-  mode: "split" | "breakdown";
   text: string;
   /** Where accepted suggestions are added. */
   bucket: Bucket;
@@ -30,7 +29,7 @@ export function AiSheet({ request, onClose, onAdd }: Props) {
     let alive = true;
     setPhase({ kind: "loading" });
     api
-      .suggest(request.mode, request.text)
+      .suggest(request.text)
       .then((items) => {
         if (!alive) return;
         setPhase({ kind: "ready", items });
@@ -60,7 +59,7 @@ export function AiSheet({ request, onClose, onAdd }: Props) {
         >
           <Sparkle size={22} />
         </motion.span>
-        {request?.mode === "breakdown" ? "AIで分解" : "AIで分割"}
+        AIで分割
       </div>
 
       <AnimatePresence mode="wait">

@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
 import { currentUser, devLogin, finishGoogleLogin, logout, startGoogleLogin } from "./auth";
-import { suggestTasks, type AiMode } from "./ai";
+import { suggestTasks } from "./ai";
 import { STATIC } from "./static.gen";
 import { BUCKETS, type Bucket, type Env, type User } from "./types";
 
@@ -98,12 +98,11 @@ app.delete("/api/tasks/:id", async (c) => {
 });
 
 app.post("/api/ai/suggest", async (c) => {
-  const body = await c.req.json<{ mode?: unknown; text?: unknown }>().catch(() => ({}) as Record<string, unknown>);
-  const mode: AiMode = body.mode === "breakdown" ? "breakdown" : "split";
+  const body = await c.req.json<{ text?: unknown }>().catch(() => ({}) as Record<string, unknown>);
   const text = cleanText(body.text);
   if (!text) return c.json({ error: "text required" }, 400);
   try {
-    return c.json({ tasks: await suggestTasks(c.env, mode, text) });
+    return c.json({ tasks: await suggestTasks(c.env, text) });
   } catch (e) {
     console.error("workers ai failed", e);
     return c.json({ error: "ai unavailable" }, 502);

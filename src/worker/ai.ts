@@ -2,16 +2,9 @@ import type { Env } from "./types";
 
 export const AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
-export type AiMode = "split" | "breakdown";
-
-const PROMPTS: Record<AiMode, string> = {
-  split:
-    "あなたはタスク整理のアシスタントです。ユーザーのメモを読み、実行可能なタスクに分割してください。" +
-    "各タスクは日本語で、動詞で終わる30文字以内の簡潔な文にします。重複や挨拶は除き、最大8件。",
-  breakdown:
-    "あなたはタスク分解のアシスタントです。与えられたタスクを、順番に実行できる具体的なサブタスクに分解してください。" +
-    "各サブタスクは日本語で、動詞で終わる30文字以内の簡潔な文にします。3〜6件。",
-};
+const PROMPT =
+  "あなたはタスク整理のアシスタントです。ユーザーのメモを読み、実行可能なタスクに分割してください。" +
+  "各タスクは日本語で、動詞で終わる30文字以内の簡潔な文にします。重複や挨拶は除き、最大8件。";
 
 const SCHEMA = {
   type: "object",
@@ -39,16 +32,15 @@ export function normalizeTasks(raw: unknown): string[] {
     .slice(0, 8);
 }
 
-function mockTasks(mode: AiMode, text: string): string[] {
-  if (mode === "breakdown") return [`${text}の準備をする`, `${text}を進める`, `${text}を見直す`];
+function mockTasks(text: string): string[] {
   return text.split(/[\n、。,]+/).map((s) => s.trim()).filter(Boolean);
 }
 
-export async function suggestTasks(env: Env, mode: AiMode, text: string): Promise<string[]> {
-  if (env.AI_MOCK === "1") return normalizeTasks({ tasks: mockTasks(mode, text) });
+export async function suggestTasks(env: Env, text: string): Promise<string[]> {
+  if (env.AI_MOCK === "1") return normalizeTasks({ tasks: mockTasks(text) });
   const result = (await env.AI.run(AI_MODEL as Parameters<Ai["run"]>[0], {
     messages: [
-      { role: "system", content: PROMPTS[mode] + ' 出力は {"tasks": ["..."]} 形式のJSONのみ。' },
+      { role: "system", content: PROMPT + ' 出力は {"tasks": ["..."]} 形式のJSONのみ。' },
       { role: "user", content: text },
     ],
     response_format: { type: "json_schema", json_schema: SCHEMA },

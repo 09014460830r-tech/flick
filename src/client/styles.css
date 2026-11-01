@@ -427,9 +427,6 @@ button {
 .mini-btn.danger {
   color: var(--danger);
 }
-.mini-btn.ai {
-  color: var(--accent);
-}
 
 .empty {
   display: grid;

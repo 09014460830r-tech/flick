@@ -9,7 +9,7 @@ import {
   useTransform,
 } from "motion/react";
 import { BUCKETS, BUCKET_LABEL, nextBucket, type Bucket, type Task } from "../lib/api";
-import { Check, ChevronLeft, Sparkle, Trash } from "./Icons";
+import { Check, ChevronLeft, Trash } from "./Icons";
 
 export const BUCKET_COLOR: Record<Bucket, string> = {
   now: "#ff7a45",
@@ -31,7 +31,6 @@ interface Props {
   onRestore: () => void;
   onDelete: () => void;
   onEdit: (text: string) => void;
-  onBreakdown: () => void;
 }
 
 interface FlickAction {
@@ -44,7 +43,7 @@ interface FlickAction {
 const fade = (hex: string, alpha: number) =>
   hex + Math.round(alpha * 255).toString(16).padStart(2, "0");
 
-export function TaskCard({ task, nudge, onMove, onDone, onRestore, onDelete, onEdit, onBreakdown }: Props) {
+export function TaskCard({ task, nudge, onMove, onDone, onRestore, onDelete, onEdit }: Props) {
   const x = useMotionValue(0);
   const rowRef = useRef<HTMLLIElement>(null);
   const [expanded, setExpanded] = useState(false);
@@ -278,15 +277,11 @@ export function TaskCard({ task, nudge, onMove, onDone, onRestore, onDelete, onE
                     <Check size={13} />
                     完了
                   </motion.button>
-                  <motion.button type="button" className="mini-btn ai" {...buttonIn(5)} onClick={onBreakdown}>
-                    <Sparkle size={15} />
-                    AIで分解
-                  </motion.button>
                   <motion.button
                     type="button"
                     className="mini-btn danger"
                     aria-label="削除"
-                    {...buttonIn(6)}
+                    {...buttonIn(5)}
                     onClick={onDelete}
                   >
                     <Trash />

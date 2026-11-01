@@ -40,8 +40,8 @@ export const api = {
   update: (id: string, patch: TaskPatch) =>
     request(`/api/tasks/${encodeURIComponent(id)}`, json("PATCH", patch)),
   remove: (id: string) => request(`/api/tasks/${encodeURIComponent(id)}`, { method: "DELETE" }),
-  suggest: (mode: "split" | "breakdown", text: string) =>
-    request<{ tasks: string[] }>("/api/ai/suggest", json("POST", { mode, text })).then((r) => r.tasks),
+  suggest: (text: string) =>
+    request<{ tasks: string[] }>("/api/ai/suggest", json("POST", { text })).then((r) => r.tasks),
   logout: () => request("/auth/logout", { method: "POST" }),
 };
 

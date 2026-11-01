@@ -453,16 +453,13 @@ test.describe("AI（Workers AI）", () => {
     await expect(page.getByTestId("suggestion")).toHaveCount(2);
   });
 
-  test("タスクをAIで分解できる", async ({ page }) => {
-    await login(page);
+  test("タスクのボタンに「AIで分解」は無い", async ({ page }) => {
+    await page.goto("/");
     await ready(page);
     await addTask(page, "引っ越し");
     await taskByText(page, "引っ越し").locator(".card").click();
-    await page.getByRole("button", { name: "AIで分解" }).click();
-    const dialog = page.getByRole("dialog", { name: "AI" });
-    await expect(dialog.getByTestId("suggestion")).toHaveCount(3);
-    await dialog.getByRole("button", { name: "3件追加" }).click();
-    await expect(tasks(page)).toHaveCount(4);
+    await expect(taskByText(page, "引っ越し").locator(".card")).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByRole("button", { name: /分解/ })).toHaveCount(0);
   });
 
   test("シートは下スワイプで閉じる", async ({ page }) => {

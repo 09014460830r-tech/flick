@@ -78,7 +78,7 @@ export function App() {
         )}
         <Composer
           onSubmit={(text) => addTasks([text], target)}
-          onAi={(text, clear) => requestAi({ mode: "split", text, bucket: target, onAdded: clear })}
+          onAi={(text, clear) => requestAi({ text, bucket: target, onAdded: clear })}
         />
         <AnimatePresence mode="wait" initial={false}>
           {phase === "loading" ? (
@@ -106,7 +106,6 @@ export function App() {
                         }
                         onDelete={() => removeTask(task.id)}
                         onEdit={(text) => editTask(task.id, text)}
-                        onBreakdown={() => requestAi({ mode: "breakdown", text: task.text, bucket: task.bucket })}
                       />
                     ))}
                   </AnimatePresence>
