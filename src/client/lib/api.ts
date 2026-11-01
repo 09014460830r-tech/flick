@@ -54,9 +54,6 @@ export const BUCKET_LABEL: Record<Bucket, string> = {
   other: "その他",
 };
 
-/** The bucket a left flick postpones to; null for the last one (where a left flick deletes). */
-export const nextBucket = (b: Bucket): Bucket | null => BUCKETS[BUCKETS.indexOf(b) + 1] ?? null;
-
 const isBucket = (b: unknown): b is Bucket => BUCKETS.includes(b as Bucket);
 
 /** Accepts server rows (done as 0/1) and tasks saved by earlier versions (todo/doing/done status). */

@@ -157,41 +157,33 @@ test.describe("分類とフリック", () => {
     await expect(taskByText(page, "完了タブから")).toHaveAttribute("data-bucket", "now");
   });
 
-  test("右フリックで完了タブへ移り、左フリックで元の分類に戻る", async ({ page }) => {
-    await tab(page, "次に").click();
-    await addTask(page, "片付ける");
-    await flick(page, taskByText(page, "片付ける"), 220);
-    await expect(taskByText(page, "片付ける")).toHaveCount(0);
-    await expect(tab(page, "完了")).toContainText("1");
-    await tab(page, "完了").click();
-    const row = taskByText(page, "片付ける");
-    await expect(row).toHaveAttribute("data-done", "true");
-    await expect(row.locator(".chip")).toHaveText("次に");
-    await flick(page, row, -220);
-    await expect(taskByText(page, "片付ける")).toHaveCount(0);
-    await tab(page, "次に").click();
-    await expect(taskByText(page, "片付ける")).toHaveAttribute("data-done", "false");
-  });
+  for (const [dir, dx] of [["右", 220], ["左", -220]] as const) {
+    test(`${dir}フリックで完了、完了タブで${dir}フリックすると元の分類に戻る`, async ({ page }) => {
+      await tab(page, "次に").click();
+      await addTask(page, "片付ける");
+      await flick(page, taskByText(page, "片付ける"), dx);
+      await expect(taskByText(page, "片付ける")).toHaveCount(0);
+      await expect(tab(page, "完了")).toContainText("1");
+      await tab(page, "完了").click();
+      const row = taskByText(page, "片付ける");
+      await expect(row).toHaveAttribute("data-done", "true");
+      await expect(row.locator(".chip")).toHaveText("次に");
+      await flick(page, row, dx);
+      await expect(taskByText(page, "片付ける")).toHaveCount(0);
+      // The previous toast may still be fading out beside the new one.
+      await expect(page.getByRole("status").filter({ hasText: "「次に」に戻しました" })).toBeVisible();
+      await tab(page, "次に").click();
+      await expect(taskByText(page, "片付ける")).toHaveAttribute("data-done", "false");
+    });
+  }
 
-  test("左フリックで 今すぐ → 次に → いつか → その他 と後回しにできる", async ({ page }) => {
-    await addTask(page, "後回し");
-    for (const [from, to] of [["今すぐ", "次に"], ["次に", "いつか"], ["いつか", "その他"]]) {
-      await tab(page, from).click();
-      await flick(page, taskByText(page, "後回し"), -220);
-      await expect(taskByText(page, "後回し")).toHaveCount(0);
-      await tab(page, to).click();
-      await expect(taskByText(page, "後回し")).toHaveCount(1);
-    }
-    await expect(taskByText(page, "後回し")).toHaveAttribute("data-bucket", "other");
-  });
-
-  test("その他を左フリックで削除し、元に戻せる", async ({ page }) => {
+  test("フリックでは分類は変わらず、削除もされない", async ({ page }) => {
     await tab(page, "その他").click();
-    await addTask(page, "消す");
-    await flick(page, taskByText(page, "消す"), -220);
-    await expect(taskByText(page, "消す")).toHaveCount(0);
-    await page.getByRole("button", { name: "元に戻す" }).click();
-    await expect(taskByText(page, "消す")).toHaveAttribute("data-bucket", "other");
+    await addTask(page, "その他のまま");
+    await flick(page, taskByText(page, "その他のまま"), -220);
+    await tab(page, "完了").click();
+    await expect(taskByText(page, "その他のまま")).toHaveAttribute("data-bucket", "other");
+    await expect(tab(page, "次に")).toContainText("0");
   });
 
   test("完了はトーストから元に戻せる", async ({ page }) => {
@@ -200,15 +192,6 @@ test.describe("分類とフリック", () => {
     await expect(page.getByRole("status")).toContainText("完了しました");
     await page.getByRole("button", { name: "元に戻す" }).click();
     await expect(taskByText(page, "うっかり")).toHaveAttribute("data-done", "false");
-  });
-
-  test("完了タブで右フリックしても変わらない", async ({ page }) => {
-    await addTask(page, "上限");
-    await flick(page, taskByText(page, "上限"), 220);
-    await tab(page, "完了").click();
-    await flick(page, taskByText(page, "上限"), 220);
-    await page.waitForTimeout(500);
-    await expect(taskByText(page, "上限")).toHaveAttribute("data-done", "true");
   });
 
   test("短くゆっくりなドラッグでは何も変わらない", async ({ page }) => {
@@ -225,11 +208,11 @@ test.describe("分類とフリック", () => {
     await tab(page, "いつか").click();
     await addTask(page, "展開しない");
     await flick(page, taskByText(page, "展開しない"), -220);
-    await tab(page, "その他").click();
+    await tab(page, "完了").click();
     await expect(taskByText(page, "展開しない").getByRole("button", { expanded: true })).toHaveCount(0);
   });
 
-  test("ドラッグ中は行き先が背面に現れる", async ({ page }) => {
+  test("ドラッグ中は左右どちらでも背面に「完了」が現れる", async ({ page }) => {
     await addTask(page, "プレビュー");
     const row = taskByText(page, "プレビュー");
     const box = await settled(row.locator(".card"));
@@ -241,7 +224,7 @@ test.describe("分類とフリック", () => {
     const bg = await row.locator(".reveal").evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bg).not.toBe("rgba(0, 0, 0, 0)");
     await page.mouse.up();
-    await expect(row.locator(".reveal")).toContainText("次に");
+    await expect(row.locator(".reveal")).not.toContainText("次に");
   });
 
   test("タップで展開し、ボタンで分類変更・完了・編集・削除できる", async ({ page }) => {
@@ -274,8 +257,8 @@ test.describe("分類とフリック", () => {
     await addTask(page, "キー操作");
     await taskByText(page, "キー操作").locator(".card").focus();
     await page.keyboard.press("ArrowLeft");
-    await tab(page, "次に").click();
-    await expect(taskByText(page, "キー操作")).toHaveCount(1);
+    await tab(page, "完了").click();
+    await expect(taskByText(page, "キー操作")).toHaveAttribute("data-done", "true");
   });
 
   test("長押しで持ち上げてタブに放り込むと、その分類へ移る", async ({ page }) => {
@@ -351,7 +334,7 @@ test.describe("分類とフリック", () => {
     await addTask(page, "素早く");
     await flick(page, taskByText(page, "素早く"), -220);
     await expect(page.getByTestId("lift-ghost")).toHaveCount(0);
-    await tab(page, "次に").click();
+    await tab(page, "完了").click();
     await expect(taskByText(page, "素早く")).toHaveCount(1);
   });
 
@@ -414,7 +397,7 @@ test.describe("Google認証とクラウド同期", () => {
     await login(page);
     await ready(page);
     await addTask(page, "クラウド");
-    await flick(page, taskByText(page, "クラウド"), -220);
+    await carry(page, taskByText(page, "クラウド"), "次に");
     await expect(tab(page, "次に")).toContainText("1");
     await page.waitForLoadState("networkidle");
     await page.evaluate(() => localStorage.clear());

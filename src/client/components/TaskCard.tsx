@@ -8,8 +8,8 @@ import {
   useMotionValueEvent,
   useTransform,
 } from "motion/react";
-import { BUCKETS, BUCKET_LABEL, nextBucket, type Bucket, type Task } from "../lib/api";
-import { Check, ChevronLeft, Trash } from "./Icons";
+import { BUCKETS, BUCKET_LABEL, type Bucket, type Task } from "../lib/api";
+import { Check, Trash, Undo } from "./Icons";
 import type { Filter } from "./Filters";
 import { LiftGhost, type Lift } from "./LiftGhost";
 
@@ -20,7 +20,6 @@ export const BUCKET_COLOR: Record<Bucket, string> = {
   other: "#8c93b0",
 };
 const DONE = "#2fbf71";
-const DANGER = "#ff4d6a";
 const THRESHOLD = 88;
 const LONG_PRESS_MS = 400;
 const PRESS_SLOP = 8;
@@ -90,23 +89,17 @@ export function TaskCard({ task, nudge, onMove, onDone, onRestore, onDelete, onE
     setExpanded(false);
   }, [isPresent, x]);
 
-  // Right finishes a task; left postpones it to the next bucket (deleting from the last one).
-  // A finished task flicked left goes back to the bucket it came from.
-  const postponeTo = nextBucket(task.bucket);
-  const right: FlickAction | null = task.done
-    ? null
+  // A flick either way only ever finishes a task — or, in 完了, sends it back where it came from.
+  // Moving between buckets is the long-press-and-drop gesture's job.
+  const flickAction: FlickAction = task.done
+    ? { label: `「${BUCKET_LABEL[task.bucket]}」に戻す`, color: BUCKET_COLOR[task.bucket], icon: <Undo />, run: onRestore }
     : { label: "完了", color: DONE, icon: <Check size={18} />, run: onDone };
-  const left: FlickAction = task.done
-    ? { label: `「${BUCKET_LABEL[task.bucket]}」に戻す`, color: BUCKET_COLOR[task.bucket], icon: <ChevronLeft />, run: onRestore }
-    : postponeTo
-      ? { label: BUCKET_LABEL[postponeTo], color: BUCKET_COLOR[postponeTo], icon: <ChevronLeft />, run: () => onMove(postponeTo) }
-      : { label: "削除", color: DANGER, icon: <Trash />, run: onDelete };
-  const rightColor = right?.color ?? "#ffffff";
+  const { color } = flickAction;
 
   const background = useTransform(
     x,
     [-THRESHOLD, -THRESHOLD * 0.5, 0, THRESHOLD * 0.5, THRESHOLD],
-    [left.color, fade(left.color, 0.45), fade(left.color, 0), fade(rightColor, 0.45), rightColor],
+    [color, fade(color, 0.45), fade(color, 0), fade(color, 0.45), color],
   );
   const leftOpacity = useTransform(x, [0, THRESHOLD * 0.6], [0, 1]);
   const rightOpacity = useTransform(x, [-THRESHOLD * 0.6, 0], [1, 0]);
@@ -115,7 +108,7 @@ export function TaskCard({ task, nudge, onMove, onDone, onRestore, onDelete, onE
   const tilt = useTransform(x, [-240, 0, 240], [-2.5, 0, 2.5]);
 
   useMotionValueEvent(x, "change", (v) => {
-    const zone = v > THRESHOLD && right ? 1 : v < -THRESHOLD ? -1 : 0;
+    const zone = v > THRESHOLD ? 1 : v < -THRESHOLD ? -1 : 0;
     if (zone !== armed.current) {
       armed.current = zone;
       if (zone) navigator.vibrate?.(8);
@@ -143,8 +136,7 @@ export function TaskCard({ task, nudge, onMove, onDone, onRestore, onDelete, onE
 
   const settle = (dx: number, vx: number) => {
     const dir = dx > THRESHOLD || (vx > 650 && dx > 32) ? 1 : dx < -THRESHOLD || (vx < -650 && dx < -32) ? -1 : 0;
-    if (dir === 1 && right) return commit(1, right);
-    if (dir === -1) return commit(-1, left);
+    if (dir) return commit(dir, flickAction);
     animate(x, 0, spring);
   };
 
@@ -174,16 +166,12 @@ export function TaskCard({ task, nudge, onMove, onDone, onRestore, onDelete, onE
     >
       <motion.div className="reveal" style={{ background }} aria-hidden>
         <motion.span className="reveal-side" style={{ opacity: leftOpacity, scale: leftScale }}>
-          {right && (
-            <>
-              {right.icon}
-              {right.label}
-            </>
-          )}
+          {flickAction.icon}
+          {flickAction.label}
         </motion.span>
         <motion.span className="reveal-side" style={{ opacity: rightOpacity, scale: rightScale }}>
-          {left.label}
-          {left.icon}
+          {flickAction.label}
+          {flickAction.icon}
         </motion.span>
       </motion.div>
 
@@ -193,7 +181,7 @@ export function TaskCard({ task, nudge, onMove, onDone, onRestore, onDelete, onE
         drag={expanded || lift ? false : "x"}
         dragDirectionLock
         dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={{ left: 1, right: right ? 1 : 0.12 }}
+        dragElastic={1}
         dragMomentum={false}
         ref={cardRef}
         onPointerDown={(e) => {
@@ -229,8 +217,8 @@ export function TaskCard({ task, nudge, onMove, onDone, onRestore, onDelete, onE
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             setExpanded((v) => !v);
-          } else if (e.key === "ArrowRight" && right) commit(1, right);
-          else if (e.key === "ArrowLeft") commit(-1, left);
+          } else if (e.key === "ArrowRight") commit(1, flickAction);
+          else if (e.key === "ArrowLeft") commit(-1, flickAction);
         }}
       >
         <motion.span

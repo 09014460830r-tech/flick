@@ -43,6 +43,12 @@ export const ChevronLeft = () => (
     <path d="M15 5l-7 7 7 7" />
   </svg>
 );
+export const Undo = () => (
+  <svg {...base(18)}>
+    <path d="M9 14L4 9l5-5" />
+    <path d="M4 9h10.5a5.5 5.5 0 010 11H11" />
+  </svg>
+);
 export const Inbox = () => (
   <svg {...base(34)} strokeWidth={1.6}>
     <path d="M4 13l2.5-7h11L20 13M4 13v5a2 2 0 002 2h12a2 2 0 002-2v-5M4 13h4.5l1 2h5l1-2H20" />
